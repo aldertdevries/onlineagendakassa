@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head><meta charset="utf-8"><title>Tests — prototype</title>
+<link rel="stylesheet" href="css/style.css"></head>
+<body>
+<main><h1>Tests</h1><pre id="out">Bezig…</pre></main>
+<script type="module">
+  import './tests/framework.test.mjs';
+  import './tests/store.test.mjs';
+  import './tests/seed.test.mjs';
+  import './tests/slots.test.mjs';
+  import './tests/invoices.test.mjs';
+  import './tests/status.test.mjs';
+  import './tests/reminders.test.mjs';
+  import './tests/reports.test.mjs';
+  import { runAll } from './tests/framework.mjs';
+  const lines = [];
+  runAll(msg => lines.push(msg));
+  document.getElementById('out').textContent = lines.join('\n');
+</script>
+</body>
+</html>
