@@ -64,7 +64,7 @@ Bedragen als integers in centen; tijden in UTC; weergave in Europe/Amsterdam.
 ## 4. Kernflows
 
 ### Registratie en validatie
-1. **Klant:** formulier (naam, adres, whatsapp-nummer, e-mail, wachtwoord) → verificatielink per e-mail → SMS-code voor telefoon (provider achter één interface, bijv. Twilio Verify of MessageBird). Pas na beide stappen kan er geboekt worden.
+1. **Klant:** formulier (naam, adres, whatsapp-nummer, e-mail, wachtwoord) → verificatielink per e-mail → SMS-code voor telefoon (Twilio Verify, achter een eigen interface zodat de provider verwisselbaar blijft). Pas na beide stappen kan er geboekt worden.
 2. **Bedrijf:** zelfde velden + KVK-nummer + logo → e-mail- en SMS-verificatie → handmatige keuring door admin (wachtrij met naam, adres, KVK). Goed-/afkeuring wordt gemaild; afkeuring met reden.
 3. **Logo:** queue-job schaalt naar 300×300 px (Intervention Image), passend binnen het kader met witruimte (geen vervorming).
 
@@ -76,8 +76,9 @@ slot vangt de unieke index de tweede boeking af met een nette melding. Bevestigi
 naar klant en bedrijf.
 
 ### Afspraakstatussen
-`scheduled` → (`cancelled` | `completed` | `no_show`), gezet door het bedrijf.
-De klant kan zelf afzeggen tot de afzegtermijn (default 24 uur) vóór aanvang.
+`scheduled` → (`cancelled` | `completed` | `no_show`). Het bedrijf kan elke
+overgang op elk moment zetten; de klant kan alleen naar `cancelled`, en uitsluitend tot
+de afzegtermijn (default 24 uur) vóór aanvang.
 Elke statuswissel triggert een notificatie naar de andere partij.
 Vanuit `completed` kan het bedrijf met één klik een factuur starten.
 
