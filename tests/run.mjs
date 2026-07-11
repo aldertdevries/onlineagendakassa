@@ -4,6 +4,7 @@ import './seed.test.mjs';
 import './slots.test.mjs';
 import './invoices.test.mjs';
 import './status.test.mjs';
+import './reminders.test.mjs';
 import { runAll } from './framework.mjs';
 
 const { failed } = runAll();
