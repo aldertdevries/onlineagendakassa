@@ -1,0 +1,5 @@
+import './framework.test.mjs';
+import { runAll } from './framework.mjs';
+
+const { failed } = runAll();
+process.exit(failed === 0 ? 0 : 1);
