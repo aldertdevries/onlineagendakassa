@@ -1,4 +1,5 @@
 import './framework.test.mjs';
+import './store.test.mjs';
 import { runAll } from './framework.mjs';
 
 const { failed } = runAll();
