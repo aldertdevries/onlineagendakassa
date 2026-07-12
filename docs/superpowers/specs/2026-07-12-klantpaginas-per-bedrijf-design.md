@@ -21,6 +21,12 @@ beheren en berichten lezen vereist wél verificatie van e-mail of telefoonnummer
 - Bij het boeken wordt de klant **binnen het bedrijf** gematcht op e-mailadres of
   telefoonnummer; bestaat hij al, dan wordt dat record gebruikt en worden de overige
   gegevens bijgewerkt. Anders wordt een nieuw record aangemaakt.
+- **Let op voor de Laravel-bouw:** bij een match mag het *andere* contactkanaal niet
+  ongeverifieerd overschreven worden (wie het e-mailadres van een klant kent, zou anders
+  zijn eigen telefoonnummer op dat record kunnen zetten en via de code-flow toegang
+  krijgen). Werk bij een match alleen niet-identiteitsvelden (naam) bij; een afwijkend
+  e-mail/telefoon-paar wordt een nieuw klantrecord. In het prototype is dit risico
+  niet nagebootst.
 
 ## 3. URL's en branding
 
@@ -33,6 +39,9 @@ beheren en berichten lezen vereist wél verificatie van e-mail of telefoonnummer
 - **Bedrijfsportaal** — prototype: `bedrijf.html?bedrijf=<id>` opent direct het portaal
   van dat bedrijf; de bestaande kiezer blijft de fallback zonder ID. Laravel:
   `/bedrijf/{publicId}`.
+- Het publieke ID is per definitie openbaar (het staat in de embed-code); de
+  `/bedrijf/{publicId}`-route beschermt zichzelf dus met authenticatie en steunt
+  nooit op geheimhouding van het ID.
 
 ## 4. Iframe-embedding
 
