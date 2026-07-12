@@ -8,6 +8,8 @@ body {
   line-height: 1.5;
 }
 
+[hidden] { display: none !important; }
+
 header {
   display: flex;
   align-items: center;
