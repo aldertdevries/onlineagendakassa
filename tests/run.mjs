@@ -6,6 +6,7 @@ import './invoices.test.mjs';
 import './status.test.mjs';
 import './reminders.test.mjs';
 import './reports.test.mjs';
+import './klant-toegang.test.mjs';
 import { runAll } from './framework.mjs';
 
 const { failed } = runAll();
