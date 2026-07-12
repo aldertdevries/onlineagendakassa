@@ -1,6 +1,7 @@
 # Ontwerp: Afspraken- en kassa-applicatie (SaaS)
 
-**Datum:** 2026-07-11
+**Datum:** 2026-07-11 (klantmodel herzien 2026-07-12, zie
+[2026-07-12-klantpaginas-per-bedrijf-design.md](2026-07-12-klantpaginas-per-bedrijf-design.md))
 **Status:** Goedgekeurd ontwerp, klaar voor implementatieplan
 
 ## 1. Doel en context
@@ -16,12 +17,12 @@ keurt bedrijven, stuurt zelf facturen aan bedrijven en ziet platform-brede rappo
 |---|---|
 | Exploitatie | SaaS-platform; bedrijven zijn tenants, platformbeheerder factureert bedrijven handmatig |
 | Agenda's | Generieke tijdslot-kalenders (geen dienstencatalogus); vaste slotduur + openingstijden per agenda |
-| Klantmodel | Eén platform-account per klant; boeken bij elk toegelaten bedrijf |
+| Klantmodel | Klanten bestaan per bedrijf (geen platform-account); elk bedrijf heeft een eigen gebrande, embedbare klantpagina met uniek publiek ID in de URL |
 | Communicatie V1 | Alleen e-mail; WhatsApp later via notificatie-abstractie |
-| Validatie | E-mail via verificatielink; telefoon via SMS-code; bedrijven daarnaast handmatig gekeurd door admin (adres + KVK) |
+| Validatie | Klanten: formaatvalidatie bij boeken, code via e-mail óf SMS bij beheren/berichten lezen. Bedrijven: e-mail via verificatielink, telefoon via SMS-code, daarnaast handmatig gekeurd door admin (adres + KVK) |
 | Facturatie | Factuurregels met BTW (21/9/0), PDF-bijlage, Mollie-betaallink; zelfde module voor platform→bedrijf |
 | Mollie | Eigen Mollie-account (API-sleutel) per bedrijf; platform gebruikt eigen sleutel voor facturen aan bedrijven |
-| Rollen | Eén login per bedrijf; aparte guards voor admin, bedrijf en klant |
+| Rollen | Eén login per bedrijf; guards voor admin en bedrijf; klanten hebben geen login maar een code-sessie per bedrijf |
 | Stack | PHP 8.3, Laravel 11, MySQL 8, Blade + Livewire (monoliet, benadering A) |
 
 ## 2. Architectuur en portalen
@@ -29,14 +30,20 @@ keurt bedrijven, stuurt zelf facturen aan bedrijven en ziet platform-brede rappo
 Eén Laravel-applicatie met drie portalen, gescheiden via route-prefixen en middleware:
 
 - **`/admin`** — platformbeheerder: keuringswachtrij bedrijven, platformfacturen, rapportages per bedrijf, inzicht in mislukte achtergrondtaken.
-- **`/bedrijf`** — bedrijfsportaal: agenda's, openingstijden en blokkades (vakantie, feestdagen) beheren, afspraken beheren en van status wisselen, facturen opstellen/versturen/crediteren, eigen rapportages, Mollie-sleutel en instellingen (o.a. afzegtermijn).
-- **`/`** — publiek + klantportaal: bedrijvenlijst, registratie, boeken, eigen afspraken en facturen inzien en betalen.
+- **`/bedrijf/{publicId}`** — bedrijfsportaal: agenda's, openingstijden en blokkades (vakantie, feestdagen) beheren, afspraken beheren en van status wisselen, facturen opstellen/versturen/crediteren, eigen rapportages, Mollie-sleutel, embed-fragment voor de eigen website en instellingen (o.a. afzegtermijn).
+- **`/b/{publicId}`** — klantpagina per bedrijf: gebrand met logo en naam van het bedrijf, boeken, en (na code-verificatie) eigen afspraken, berichten en facturen inzien en betalen. Embedbaar via iframe in de website van het bedrijf. Er is géén bedrijvenlijst of centraal klantportaal; zonder geldig publiek ID toont de route een neutrale uitlegpagina.
 
-**Authenticatie:** drie Laravel-guards (`admin`, `company`, `customer`) met elk een eigen
-tabel. Verificatie-eisen zitten in middleware: een account dat nog niet volledig
+`{publicId}` is een uniek, niet-raadbaar token per bedrijf, toegekend bij aanmaak.
+
+**Authenticatie:** twee Laravel-guards (`admin`, `company`) met elk een eigen tabel.
+Verificatie-eisen voor bedrijven zitten in middleware: een account dat nog niet volledig
 gevalideerd is kan inloggen maar komt niet verder dan de "verificatie afronden"-pagina.
-Een bedrijf is pas zichtbaar/bruikbaar als e-mail én telefoon geverifieerd zijn én de
-admin heeft goedgekeurd.
+Een bedrijf is pas bruikbaar als e-mail én telefoon geverifieerd zijn én de admin heeft
+goedgekeurd. Klanten hebben geen login: boeken kan direct (met formaatvalidatie);
+beheren en berichten lezen vereist een code-sessie (zie Kernflows).
+
+**Iframe-embedding:** op de `/b/{publicId}`-routes geen `X-Frame-Options` en CSP
+`frame-ancestors *`; alle overige routes blijven frame-beveiligd.
 
 **Achtergrondwerk:** Laravel-queues met database-driver (mail, PDF-generatie, logo
 herschalen). De Laravel-scheduler draait twee dagelijkse taken: afspraakherinneringen
@@ -50,9 +57,9 @@ Bedragen als integers in centen; tijden in UTC; weergave in Europe/Amsterdam.
 
 **Accounts**
 - `admins` — naam, e-mail, wachtwoord.
-- `companies` — naam, adresvelden (straat, huisnummer, postcode, plaats), whatsapp-telefoonnummer, e-mail, KVK-nummer, logopad, wachtwoord, `email_verified_at`, `phone_verified_at`, `approved_at`, afkeurreden, Mollie API-sleutel (versleuteld), afzegtermijn-uren (default 24).
-- `customers` — naam, adresvelden, whatsapp-telefoonnummer, e-mail, wachtwoord, `email_verified_at`, `phone_verified_at`.
-- `phone_verifications` — polymorf (bedrijf/klant), code, vervaltijd, pogingenteller.
+- `companies` — naam, **publiek ID** (uniek, niet-raadbaar token voor de URL's), adresvelden (straat, huisnummer, postcode, plaats), whatsapp-telefoonnummer, e-mail, KVK-nummer, logopad, wachtwoord, `email_verified_at`, `phone_verified_at`, `approved_at`, afkeurreden, Mollie API-sleutel (versleuteld), afzegtermijn-uren (default 24).
+- `customers` — `company_id`, naam, whatsapp-telefoonnummer, e-mail, optionele adresvelden (het bedrijf kan die aanvullen t.b.v. facturen). Geen wachtwoord of verificatievlaggen: klanten bestaan per bedrijf en worden bij het boeken binnen het bedrijf gematcht op e-mailadres of telefoonnummer (bestaand record wordt hergebruikt en bijgewerkt).
+- `access_codes` — polymorf doel (bedrijfs-telefoonverificatie of klant-toegang), `company_id` (bij klant-toegang), kanaal (e-mail/SMS), code, vervaltijd, pogingenteller.
 
 **Agenda & afspraken**
 - `calendars` — `company_id`, naam, slotduur (minuten), actief-vlag. Max 4 per bedrijf (applicatieregel).
@@ -67,16 +74,30 @@ Bedragen als integers in centen; tijden in UTC; weergave in Europe/Amsterdam.
 ## 4. Kernflows
 
 ### Registratie en validatie
-1. **Klant:** formulier (naam, adres, whatsapp-nummer, e-mail, wachtwoord) → verificatielink per e-mail → SMS-code voor telefoon (Twilio Verify, achter een eigen interface zodat de provider verwisselbaar blijft). Pas na beide stappen kan er geboekt worden.
-2. **Bedrijf:** zelfde velden + KVK-nummer + logo → e-mail- en SMS-verificatie → handmatige keuring door admin (wachtrij met naam, adres, KVK). Goed-/afkeuring wordt gemaild; afkeuring met reden.
+1. **Klant:** geen registratie. Boeken gebeurt rechtstreeks op de klantpagina van het
+   bedrijf met naam, e-mailadres en telefoonnummer; die gegevens worden alleen op
+   formaat **gevalideerd** (geldig e-mailadres, geldig Nederlands nummer), niet
+   geverifieerd. Verificatie komt pas bij beheren/berichten lezen (zie hieronder).
+2. **Bedrijf:** naam, adres, whatsapp-nummer, e-mail, wachtwoord + KVK-nummer + logo → e-mail- en SMS-verificatie (Twilio Verify, achter een eigen interface zodat de provider verwisselbaar blijft) → handmatige keuring door admin (wachtrij met naam, adres, KVK). Goed-/afkeuring wordt gemaild; afkeuring met reden.
 3. **Logo:** queue-job schaalt naar 300×300 px (Intervention Image), passend binnen het kader met witruimte (geen vervorming).
 
 ### Boeken
-Klant kiest bedrijf → agenda → weekweergave met vrije sloten. Sloten worden live
+De klant opent de klantpagina van het bedrijf (`/b/{publicId}`, los of ge-embed in de
+website van het bedrijf) → agenda → weekweergave met vrije sloten. Eén afspraak per
+boeking; reeksen bestaan niet. Sloten worden live
 berekend: openingstijden opgedeeld in slotduur, minus bestaande actieve afspraken,
-minus blokkades (`calendar_blocks`), alleen toekomstige tijden. Boeking in een
+minus blokkades (`calendar_blocks`), alleen toekomstige tijden. De klant wordt binnen
+het bedrijf gematcht op e-mailadres of telefoonnummer, of nieuw aangemaakt. Boeking in een
 databasetransactie; bij een race op hetzelfde slot vangt de unieke index de tweede
 boeking af met een nette melding. Bevestigingsmail naar klant en bedrijf.
+
+### Klant-toegang: beheren en berichten
+Wijzigen of afzeggen van een afspraak en het lezen van berichten (bevestigingen,
+herinneringen, facturen) vereist verificatie: de klant voert op de klantpagina zijn
+e-mailadres **óf** telefoonnummer in en ontvangt via dat kanaal een code
+(`access_codes`). Na correcte invoer heeft hij een sessie met uitsluitend zijn eigen
+gegevens bij dít bedrijf. Codes verlopen en kennen een pogingenlimiet; verzoeken zijn
+rate-limited per IP en per e-mailadres/telefoonnummer.
 
 Een dagelijkse scheduler-taak stuurt 24 uur vóór aanvang een herinnering aan de klant
 (`reminder_sent_at` voorkomt dubbele verzending) — dit drukt het aantal no-shows.
@@ -116,14 +137,14 @@ Rechtstreekse SQL-aggregaties; geen aparte rapportagetabellen in V1.
 
 - Queue-jobs: automatische retries met exponentiële backoff; blijvend falen komt in `failed_jobs`, zichtbaar voor de admin.
 - SMS-verificatie: "code opnieuw sturen" met rate-limiting; codes verlopen.
-- **SMS-misbruik (SMS-pumping):** elke SMS kost geld, dus registratie en codeverzoeken krijgen een captcha, strikte rate-limits per IP én per telefoonnummer, en V1 accepteert alleen Nederlandse nummers (+31).
+- **SMS-misbruik (SMS-pumping):** elke SMS kost geld, dus bedrijfsregistratie en klant-codeverzoeken krijgen een captcha, strikte rate-limits per IP én per telefoonnummer/e-mailadres, en V1 accepteert alleen Nederlandse nummers (+31).
 - Mollie-webhook: idempotent, verifieert altijd bij de API.
 - Dubbelboeking: afgevangen door de unieke index (databaseniveau) + nette foutmelding.
 - Mail-/SMS-provider en Mollie zitten achter interfaces zodat storingen lokaal af te handelen en te testen zijn.
 
 ## 7. Teststrategie
 
-- **Feature-tests (Pest)** per portaal: registreren → valideren → keuren (incl. rate-limits op SMS-verzoeken); boeken inclusief dubbelboek-race en blokkades; statuswissels incl. afzegtermijn; factuur `draft` → `sent` → webhook → `paid`; annuleren en crediteren; scheduler-taken voor afspraak- en betalingsherinneringen (geen dubbele verzending).
+- **Feature-tests (Pest)** per portaal: bedrijf registreren → valideren → keuren (incl. rate-limits op SMS-verzoeken); boeken als nieuwe én bestaande klant (matching binnen bedrijf) inclusief formaatvalidatie, dubbelboek-race en blokkades; klant-codeflow (juiste/onjuiste/verlopen code, pogingenlimiet, alleen data van het bedrijf uit de URL); statuswissels incl. afzegtermijn; factuur `draft` → `sent` → webhook → `paid`; annuleren en crediteren; scheduler-taken voor afspraak- en betalingsherinneringen (geen dubbele verzending).
 - **Unit-tests:** slotgenerator (openingstijden × slotduur × bestaande afspraken × blokkades), factuur-/BTW-totalen incl. negatieve creditnotaregels, toegestane statusovergangen.
 - **Fakes:** Mollie, SMS-provider en mail worden gemockt via hun interfaces / Laravel-fakes.
 

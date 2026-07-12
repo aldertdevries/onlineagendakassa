@@ -39,3 +39,25 @@ test('seed bevat keuringswachtrij en vervallen factuur', () => {
     'vervallen factuur:'
   );
 });
+
+test('seed: bedrijven hebben een uniek publiek ID', () => {
+  const s = createStore(memStorage());
+  seedIfEmpty(s, '2026-07-11');
+  const ids = s.companies.all().map(c => c.publicId);
+  assertTrue(ids.every(id => typeof id === 'string' && id.length === 8), 'vorm:');
+  assertEqual(new Set(ids).size, ids.length, 'uniek:');
+});
+
+test('seed: klanten horen bij één bedrijf en afspraken blijven binnen dat bedrijf', () => {
+  const s = createStore(memStorage());
+  seedIfEmpty(s, '2026-07-11');
+  assertTrue(s.customers.all().every(c => typeof c.companyId === 'number'), 'companyId:');
+  for (const a of s.appointments.all()) {
+    const cal = s.calendars.get(a.calendarId);
+    const klant = s.customers.get(a.customerId);
+    assertEqual(klant.companyId, cal.companyId, `afspraak ${a.id}:`);
+  }
+  for (const i of s.invoices.all().filter(i => i.recipientType === 'customer')) {
+    assertEqual(s.customers.get(i.recipientId).companyId, i.issuerCompanyId, `factuur ${i.id}:`);
+  }
+});

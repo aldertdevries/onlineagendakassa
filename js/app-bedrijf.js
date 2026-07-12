@@ -3,6 +3,7 @@ import { calcTotals, nextInvoiceNumber, creditLines } from './logic/invoices.js'
 import { canTransition, STATUS_LABELS } from './logic/status.js';
 import { shiftDays } from './logic/reminders.js';
 import { paymentStatusOfAppointment, revenueByPeriod, inactiveCustomers } from './logic/reports.js';
+import { makePublicId } from './logic/klant-toegang.js';
 
 const store = initStore();
 let currentCompanyId = null;
@@ -65,7 +66,7 @@ function renderRegistratie() {
       const smsCode = String(Math.floor(Math.random() * 900000 + 100000));
       const maak = logoDataUrl => {
         const rec = store.companies.create({
-          name: f.get('name'), street: f.get('street'), houseNumber: f.get('houseNumber'),
+          name: f.get('name'), publicId: makePublicId(), street: f.get('street'), houseNumber: f.get('houseNumber'),
           postalCode: f.get('postalCode'), city: f.get('city'), phone: f.get('phone'),
           email: f.get('email'), kvk: f.get('kvk'), logoDataUrl,
           emailVerified: false, phoneVerified: false, approvedAt: null,
@@ -144,6 +145,20 @@ function renderAgendas() {
   inst.querySelector('#mollie').addEventListener('change', e =>
     store.companies.update(b.id, { mollieLinked: e.target.checked }));
   box.appendChild(inst);
+
+  const klantUrl = new URL(`index.html?bedrijf=${b.publicId}`, location.href).href;
+  const embedCode = `<iframe src="${klantUrl}" style="width:100%;height:900px;border:0" title="Afspraken ${b.name}"></iframe>`;
+  const embed = el(`<div class="card"><h3>Jouw klantpagina</h3>
+    <p><a href="${esc(klantUrl)}" target="_blank">${esc(klantUrl)}</a></p>
+    <p>Zet de klantpagina in je eigen website met dit fragment:</p>
+    <textarea readonly rows="3" style="width:100%">${esc(embedCode)}</textarea>
+    <button class="btn btn-secondary" type="button">Kopieer fragment</button></div>`);
+  embed.querySelector('button').addEventListener('click', () => {
+    navigator.clipboard.writeText(embedCode).then(
+      () => { embed.querySelector('button').textContent = 'Gekopieerd!'; },
+      () => { embed.querySelector('button').textContent = 'Kopiëren mislukt — selecteer de tekst handmatig'; });
+  });
+  box.appendChild(embed);
 
   for (const cal of eigenAgendas()) {
     const kaart = el(`<div class="card"><h3>${esc(cal.name)} — ${cal.slotMinutes} min
@@ -235,7 +250,8 @@ function zetStatus(appt, to) {
   const klant = store.customers.get(appt.customerId);
   const cal = store.calendars.get(appt.calendarId);
   sendMail(store, klant.email, `Afspraak ${STATUS_LABELS[to].toLowerCase()}`,
-    `Beste ${klant.name},\n\nJe afspraak bij ${bedrijf().name} (${cal.name}) van ${fmtDT(appt.startsAt)} heeft nu de status: ${STATUS_LABELS[to]}.`);
+    `Beste ${klant.name},\n\nJe afspraak bij ${bedrijf().name} (${cal.name}) van ${fmtDT(appt.startsAt)} heeft nu de status: ${STATUS_LABELS[to]}.`,
+    { companyId: bedrijf().id, customerId: klant.id });
   renderAll();
 }
 
@@ -306,7 +322,8 @@ function verstuurFactuur(inv) {
   let body = `Beste ${ontvanger.name},\n\nHierbij factuur ${nummer} van ${b.name}:\n${regels}\nTotaal: ${euro(totals.inclCents)}\n\n(Simulatie: de PDF is de printbare weergave in de app.)`;
   if (b.mollieLinked) body += `\n\nBetaal online: betaal.html?invoice=${inv.id}`;
   else body += `\n\nMaak het bedrag over o.v.v. het factuurnummer.`;
-  sendMail(store, ontvanger.email, `Factuur ${nummer} van ${b.name}`, body);
+  sendMail(store, ontvanger.email, `Factuur ${nummer} van ${b.name}`, body,
+    { companyId: b.id, customerId: ontvanger.id });
   return bij;
 }
 
@@ -321,7 +338,8 @@ function renderFacturen() {
     lines: [{ description: '', qty: 1, unitPriceCents: 0, vatRate: 21 }] };
 
   const klantSel = el(`<select><option value="">— kies klant —</option>
-    ${store.customers.all().map(c => `<option value="${c.id}" ${editor.customerId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+    ${store.customers.where(c => c.companyId === currentCompanyId).map(c =>
+      `<option value="${c.id}" ${editor.customerId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
   </select>`);
   klantSel.addEventListener('change', () => { editor.customerId = Number(klantSel.value) || null; });
   ed.appendChild(el('<label>Klant</label>'));
@@ -465,7 +483,8 @@ function renderFacturen() {
         });
         const ontvanger = store.customers.get(inv.recipientId);
         sendMail(store, ontvanger.email, `Creditnota ${nummer} (bij factuur ${inv.number})`,
-          `Beste ${ontvanger.name},\n\nHierbij creditnota ${nummer} van ${bedrijf().name} voor factuur ${inv.number}: ${euro(nota.totals.inclCents)}.`);
+          `Beste ${ontvanger.name},\n\nHierbij creditnota ${nummer} van ${bedrijf().name} voor factuur ${inv.number}: ${euro(nota.totals.inclCents)}.`,
+          { companyId: currentCompanyId, customerId: ontvanger.id });
         renderAll();
       });
       cell.appendChild(credit);
@@ -555,6 +574,12 @@ function rebuildPicker() {
     editor = null;
     renderAll();
   });
+}
+
+const urlPublicId = new URLSearchParams(location.search).get('bedrijf');
+if (urlPublicId) {
+  const gekozen = store.companies.where(c => c.publicId === urlPublicId)[0];
+  if (gekozen) window.localStorage.setItem('akp-bedrijf', String(gekozen.id));
 }
 
 rebuildPicker();
