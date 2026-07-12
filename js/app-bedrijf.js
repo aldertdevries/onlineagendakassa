@@ -102,12 +102,15 @@ function renderRegistratie() {
   } else box.appendChild(el('<p>1. E-mail geverifieerd ✔</p>'));
 
   if (!b.phoneVerified) {
-    box.appendChild(el(`<p>2. SMS-code (simulatie): <strong>${esc(b.smsCode)}</strong></p>`));
+    if (!b.smsCode)
+      store.companies.update(b.id, { smsCode: String(Math.floor(Math.random() * 900000 + 100000)) });
+    const code = store.companies.get(b.id).smsCode;
+    box.appendChild(el(`<p>2. SMS-code (simulatie): <strong>${esc(code)}</strong></p>`));
     const form = el(`<form class="regel-rij"><input name="code" placeholder="Voer de code in">
       <button class="btn" type="submit">Verifieer telefoon</button></form>`);
     form.addEventListener('submit', e => {
       e.preventDefault();
-      if (new FormData(form).get('code') === b.smsCode) {
+      if (new FormData(form).get('code') === store.companies.get(b.id).smsCode) {
         store.companies.update(b.id, { phoneVerified: true });
         renderAll();
       } else alert('Onjuiste code.');
