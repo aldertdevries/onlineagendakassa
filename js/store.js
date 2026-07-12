@@ -1,7 +1,7 @@
-const KEY = 'akp-data';
+const KEY = 'akp-data-v2';
 const COLLECTIONS = [
   'companies', 'customers', 'calendars', 'openingHours',
-  'blocks', 'appointments', 'invoices', 'mails',
+  'blocks', 'appointments', 'invoices', 'mails', 'accessCodes',
 ];
 
 function emptyData() {

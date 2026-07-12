@@ -42,3 +42,9 @@ test('remove en reset', () => {
   s.reset();
   assertEqual(s.companies.all(), []);
 });
+
+test('store heeft een accessCodes-collectie', () => {
+  const s = createStore(memStorage());
+  const rec = s.accessCodes.create({ companyId: 1, customerId: 2, channel: 'sms', code: '123456', expiresAt: '2026-07-12T10:10', attempts: 0 });
+  assertEqual(s.accessCodes.get(rec.id).code, '123456', 'aanmaken/ophalen:');
+});
