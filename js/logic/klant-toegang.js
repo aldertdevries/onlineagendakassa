@@ -17,7 +17,7 @@ export function validateKlantGegevens({ name, email, phone }) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '')))
     errors.email = 'Vul een geldig e-mailadres in.';
   if (!normalizePhone(phone))
-    errors.phone = 'Vul een geldig Nederlands telefoonnummer in (06… of +316…).';
+    errors.phone = 'Vul een geldig Nederlands telefoonnummer in.';
   return { ok: Object.keys(errors).length === 0, errors };
 }
 

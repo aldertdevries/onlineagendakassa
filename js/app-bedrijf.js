@@ -154,7 +154,9 @@ function renderAgendas() {
     <textarea readonly rows="3" style="width:100%">${esc(embedCode)}</textarea>
     <button class="btn btn-secondary" type="button">Kopieer fragment</button></div>`);
   embed.querySelector('button').addEventListener('click', () => {
-    navigator.clipboard.writeText(embedCode);
+    navigator.clipboard.writeText(embedCode).then(
+      () => { embed.querySelector('button').textContent = 'Gekopieerd!'; },
+      () => { embed.querySelector('button').textContent = 'Kopiëren mislukt — selecteer de tekst handmatig'; });
   });
   box.appendChild(embed);
 

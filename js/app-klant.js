@@ -49,7 +49,7 @@ function renderBrand() {
     kop.appendChild(el('<strong>Afspraken &amp; Kassa</strong>'));
     return;
   }
-  if (company.logoDataUrl) kop.appendChild(el(`<img class="logo" src="${company.logoDataUrl}" alt="logo">`));
+  if (company.logoDataUrl) kop.appendChild(el(`<img class="logo" src="${esc(company.logoDataUrl)}" alt="logo">`));
   kop.appendChild(el(`<strong>${esc(company.name)}</strong>`));
 }
 
