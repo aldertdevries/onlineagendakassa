@@ -235,7 +235,8 @@ function zetStatus(appt, to) {
   const klant = store.customers.get(appt.customerId);
   const cal = store.calendars.get(appt.calendarId);
   sendMail(store, klant.email, `Afspraak ${STATUS_LABELS[to].toLowerCase()}`,
-    `Beste ${klant.name},\n\nJe afspraak bij ${bedrijf().name} (${cal.name}) van ${fmtDT(appt.startsAt)} heeft nu de status: ${STATUS_LABELS[to]}.`);
+    `Beste ${klant.name},\n\nJe afspraak bij ${bedrijf().name} (${cal.name}) van ${fmtDT(appt.startsAt)} heeft nu de status: ${STATUS_LABELS[to]}.`,
+    { companyId: bedrijf().id, customerId: klant.id });
   renderAll();
 }
 
@@ -306,7 +307,8 @@ function verstuurFactuur(inv) {
   let body = `Beste ${ontvanger.name},\n\nHierbij factuur ${nummer} van ${b.name}:\n${regels}\nTotaal: ${euro(totals.inclCents)}\n\n(Simulatie: de PDF is de printbare weergave in de app.)`;
   if (b.mollieLinked) body += `\n\nBetaal online: betaal.html?invoice=${inv.id}`;
   else body += `\n\nMaak het bedrag over o.v.v. het factuurnummer.`;
-  sendMail(store, ontvanger.email, `Factuur ${nummer} van ${b.name}`, body);
+  sendMail(store, ontvanger.email, `Factuur ${nummer} van ${b.name}`, body,
+    { companyId: b.id, customerId: ontvanger.id });
   return bij;
 }
 
@@ -465,7 +467,8 @@ function renderFacturen() {
         });
         const ontvanger = store.customers.get(inv.recipientId);
         sendMail(store, ontvanger.email, `Creditnota ${nummer} (bij factuur ${inv.number})`,
-          `Beste ${ontvanger.name},\n\nHierbij creditnota ${nummer} van ${bedrijf().name} voor factuur ${inv.number}: ${euro(nota.totals.inclCents)}.`);
+          `Beste ${ontvanger.name},\n\nHierbij creditnota ${nummer} van ${bedrijf().name} voor factuur ${inv.number}: ${euro(nota.totals.inclCents)}.`,
+          { companyId: currentCompanyId, customerId: ontvanger.id });
         renderAll();
       });
       cell.appendChild(credit);

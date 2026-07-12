@@ -37,8 +37,8 @@ export function esc(s) {
   }[c]));
 }
 
-export function sendMail(store, to, subject, body) {
-  return store.mails.create({ to, subject, body, sentAt: nowStr() });
+export function sendMail(store, to, subject, body, meta = {}) {
+  return store.mails.create({ to, subject, body, sentAt: nowStr(), ...meta });
 }
 
 export function renderMailbox(store, containerEl) {

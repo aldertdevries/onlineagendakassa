@@ -188,7 +188,8 @@ function renderBeheer() {
       const cal = store.calendars.get(a.calendarId);
       const b = store.companies.get(cal.companyId);
       sendMail(store, klant.email, 'Herinnering: je afspraak morgen',
-        `Beste ${klant.name},\n\nHerinnering: je afspraak bij ${b.name} (${cal.name}) op ${fmtDT(a.startsAt)}.`);
+        `Beste ${klant.name},\n\nHerinnering: je afspraak bij ${b.name} (${cal.name}) op ${fmtDT(a.startsAt)}.`,
+        { companyId: b.id, customerId: klant.id });
       store.appointments.update(a.id, { reminderSentAt: nowStr() });
       nAppt++;
     }
@@ -196,7 +197,9 @@ function renderBeheer() {
       const ontvanger = inv.recipientType === 'customer'
         ? store.customers.get(inv.recipientId) : store.companies.get(inv.recipientId);
       sendMail(store, ontvanger.email, `Betalingsherinnering factuur ${inv.number}`,
-        `Beste ${ontvanger.name},\n\nFactuur ${inv.number} staat nog open (vervallen op ${inv.dueAt}).\nBetaal online: betaal.html?invoice=${inv.id}`);
+        `Beste ${ontvanger.name},\n\nFactuur ${inv.number} staat nog open (vervallen op ${inv.dueAt}).\nBetaal online: betaal.html?invoice=${inv.id}`,
+        inv.recipientType === 'customer'
+          ? { companyId: inv.issuerCompanyId, customerId: inv.recipientId } : {});
       store.invoices.update(inv.id, { reminderCount: inv.reminderCount + 1, lastReminderAt: nowStr() });
       nInv++;
     }
