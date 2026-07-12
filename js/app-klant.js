@@ -207,7 +207,152 @@ function boek(cal, slot, invoer) {
   renderAll();
 }
 
-function renderMijn() {}
+function renderMijn() {
+  const box = document.getElementById('mijn');
+  box.innerHTML = '';
+  const klant = sessieKlant();
+  if (!klant) { renderToegang(box); return; }
+
+  const kop = el(`<div class="regel-rij"><p>Je bekijkt de gegevens van
+    <strong>${esc(klant.name)}</strong> bij ${esc(company.name)}.</p>
+    <button class="btn btn-secondary" id="uitloggen">Sluit toegang</button></div>`);
+  kop.querySelector('#uitloggen').addEventListener('click', () => { stopSessie(); renderAll(); });
+  box.appendChild(kop);
+  renderMijnAfspraken(box, klant);
+  renderMijnBerichten(box, klant);
+  renderMijnFacturen(box, klant);
+}
+
+// ---------- toegang via code ----------
+function renderToegang(box) {
+  box.appendChild(el('<h2>Mijn afspraken &amp; berichten</h2>'));
+  box.appendChild(el(`<p>Om je afspraken te beheren of berichten te lezen controleren we
+    eerst dat jij het bent: vul je e-mailadres óf telefoonnummer in, dan sturen we
+    een code.</p>`));
+
+  const vraag = el(`<form class="regel-rij">
+    <input name="contact" placeholder="E-mailadres of telefoonnummer" required>
+    <button class="btn" type="submit">Stuur code</button>
+  </form>`);
+  const uitleg = el('<div></div>');
+  vraag.addEventListener('submit', e => {
+    e.preventDefault();
+    const invoer = String(new FormData(vraag).get('contact')).trim();
+    const viaMail = invoer.includes('@');
+    const klant = viaMail
+      ? findCustomer(store.customers.all(), company.id, invoer, '')
+      : findCustomer(store.customers.all(), company.id, '', invoer);
+    uitleg.innerHTML = '';
+    if (!klant) {
+      uitleg.appendChild(el(`<div class="banner banner-error">We kennen dit
+        ${viaMail ? 'e-mailadres' : 'telefoonnummer'} niet bij ${esc(company.name)}.</div>`));
+      return;
+    }
+    const code = String(Math.floor(Math.random() * 900000 + 100000));
+    const rec = store.accessCodes.create({
+      companyId: company.id, customerId: klant.id, channel: viaMail ? 'email' : 'sms',
+      code, expiresAt: addMinutes(nowStr(), CODE_GELDIG_MINUTEN), attempts: 0,
+    });
+    toegangCodeId = rec.id;
+    if (viaMail) {
+      sendMail(store, klant.email, `Je toegangscode voor ${company.name}`,
+        `Beste ${klant.name},\n\nJe toegangscode is: ${code}\nDe code is ${CODE_GELDIG_MINUTEN} minuten geldig.`,
+        { companyId: company.id, customerId: klant.id });
+    }
+    uitleg.appendChild(el(`<p>${viaMail ? 'E-mail' : 'SMS'}-code (simulatie):
+      <strong>${esc(code)}</strong></p>`));
+    const codeForm = el(`<form class="regel-rij">
+      <input name="code" placeholder="Voer de code in" required>
+      <button class="btn" type="submit">Bevestig</button>
+      <span class="fout"></span>
+    </form>`);
+    codeForm.addEventListener('submit', ev => {
+      ev.preventDefault();
+      const codeRec = store.accessCodes.get(toegangCodeId);
+      const r = checkAccessCode(codeRec, new FormData(codeForm).get('code'), nowStr());
+      if (!r.ok) {
+        if (r.telPoging) store.accessCodes.update(codeRec.id, { attempts: codeRec.attempts + 1 });
+        codeForm.querySelector('.fout').textContent = r.reason;
+        return;
+      }
+      store.accessCodes.remove(codeRec.id);
+      toegangCodeId = null;
+      startSessie(codeRec.customerId);
+      renderAll();
+    });
+    uitleg.appendChild(codeForm);
+  });
+  box.appendChild(vraag);
+  box.appendChild(uitleg);
+}
+
+// ---------- afspraken ----------
+function renderMijnAfspraken(box, klant) {
+  box.appendChild(el('<h3>Afspraken</h3>'));
+  const eigen = store.appointments.where(a => a.customerId === klant.id)
+    .sort((a, b) => (a.startsAt < b.startsAt ? 1 : -1));
+  if (!eigen.length) { box.appendChild(el('<p>Nog geen afspraken.</p>')); return; }
+  const table = el('<table><thead><tr><th>Agenda</th><th>Wanneer</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>');
+  const tbody = table.querySelector('tbody');
+  for (const a of eigen) {
+    const cal = store.calendars.get(a.calendarId);
+    const tr = el(`<tr><td>${esc(cal.name)}</td><td>${fmtDT(a.startsAt)}</td>
+      <td><span class="badge status-${a.status}">${STATUS_LABELS[a.status]}</span></td><td></td></tr>`);
+    if (a.status === 'scheduled') {
+      const btn = el('<button class="btn btn-danger">Afzeggen</button>');
+      btn.addEventListener('click', () => {
+        const r = canTransition(a, 'cancelled', 'customer', nowStr(), company.cancelHours);
+        if (!r.ok) { alert(r.reason); return; }
+        if (!confirm(`Afspraak van ${fmtDT(a.startsAt)} afzeggen? Een nieuwe boek je via de tab Boeken.`)) return;
+        store.appointments.update(a.id, { status: 'cancelled', cancelledAt: nowStr() });
+        sendMail(store, company.email, 'Afspraak afgezegd',
+          `${klant.name} heeft de afspraak van ${fmtDT(a.startsAt)} (${cal.name}) afgezegd.`);
+        renderAll();
+      });
+      tr.lastElementChild.appendChild(btn);
+    }
+    tbody.appendChild(tr);
+  }
+  box.appendChild(table);
+}
+
+// ---------- berichten ----------
+function renderMijnBerichten(box, klant) {
+  box.appendChild(el('<h3>Berichten</h3>'));
+  const berichten = store.mails.where(m => m.companyId === company.id && m.customerId === klant.id)
+    .sort((a, b) => (a.sentAt < b.sentAt ? 1 : -1));
+  if (!berichten.length) { box.appendChild(el('<p>Nog geen berichten.</p>')); return; }
+  for (const m of berichten) {
+    box.appendChild(el(`<details class="mail">
+      <summary>${esc(m.sentAt.replace('T', ' '))} — <strong>${esc(m.subject)}</strong></summary>
+      <pre>${esc(m.body)}</pre>
+    </details>`));
+  }
+}
+
+// ---------- facturen ----------
+function renderMijnFacturen(box, klant) {
+  box.appendChild(el('<h3>Facturen</h3>'));
+  const eigen = store.invoices.where(i => i.issuerCompanyId === company.id &&
+    i.recipientType === 'customer' && i.recipientId === klant.id && i.status !== 'draft');
+  if (!eigen.length) { box.appendChild(el('<p>Nog geen facturen.</p>')); return; }
+  const table = el('<table><thead><tr><th>Nummer</th><th>Bedrag</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>');
+  const tbody = table.querySelector('tbody');
+  for (const inv of eigen) {
+    const statusTekst = { sent: 'Openstaand', paid: 'Betaald', cancelled: 'Geannuleerd' }[inv.status] || inv.status;
+    const tr = el(`<tr><td>${esc(inv.number)}</td><td>${euro(inv.totals.inclCents)}</td>
+      <td>${esc(statusTekst)}</td><td></td></tr>`);
+    const cell = tr.lastElementChild;
+    if (inv.status === 'sent' && company.mollieLinked) {
+      cell.appendChild(el(`<a class="btn" href="betaal.html?invoice=${inv.id}">Betalen</a>`));
+    }
+    const bekijk = el('<button class="btn btn-secondary">Bekijk</button>');
+    bekijk.addEventListener('click', () => openInvoiceView(store, inv));
+    cell.appendChild(bekijk);
+    tbody.appendChild(tr);
+  }
+  box.appendChild(table);
+}
 
 document.getElementById('tab-boeken').addEventListener('click', () => { tab = 'boeken'; renderAll(); });
 document.getElementById('tab-mijn').addEventListener('click', () => { tab = 'mijn'; renderAll(); });
