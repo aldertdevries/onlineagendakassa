@@ -12,21 +12,24 @@ if (!inv) {
 } else if (inv.status !== 'sent') {
   box.innerHTML = `<h1>Niet betaalbaar</h1><p>Factuur ${esc(inv.number)} heeft status ${esc(inv.status)}.</p>`;
 } else {
+  const afzenderBedrijf = inv.issuerCompanyId ? store.companies.get(inv.issuerCompanyId) : null;
+  const terugUrl = inv.recipientType === 'customer' && afzenderBedrijf
+    ? `index.html?bedrijf=${afzenderBedrijf.publicId}` : 'bedrijf.html';
   box.innerHTML = `<h1>Betaal ${euro(inv.totals.inclCents)}</h1>
     <p>Factuur ${esc(inv.number)}</p>
     <button class="btn" id="pay">iDEAL — Betaal nu (simulatie)</button>
-    <a href="index.html">Annuleren</a>`;
+    <a href="${esc(terugUrl)}">Annuleren</a>`;
   document.getElementById('pay').addEventListener('click', () => {
     store.invoices.update(inv.id, { status: 'paid', paidAt: nowStr() });
     const ontvanger = inv.recipientType === 'customer'
       ? store.customers.get(inv.recipientId) : store.companies.get(inv.recipientId);
-    const afzender = inv.issuerCompanyId
-      ? store.companies.get(inv.issuerCompanyId)
-      : { name: 'Platform', email: 'platform@example.com' };
+    const afzender = afzenderBedrijf || { name: 'Platform', email: 'platform@example.com' };
     sendMail(store, ontvanger.email, `Betaling ontvangen: ${inv.number}`,
-      `Bedankt, ${euro(inv.totals.inclCents)} is voldaan.`);
+      `Bedankt, ${euro(inv.totals.inclCents)} is voldaan.`,
+      inv.recipientType === 'customer'
+        ? { companyId: inv.issuerCompanyId, customerId: ontvanger.id } : {});
     sendMail(store, afzender.email, `Factuur ${inv.number} is betaald`,
       `Ontvangen van ${ontvanger.name}.`);
-    box.innerHTML = `<h1>✅ Betaald</h1><p><a href="index.html">Terug naar het klantportaal</a></p>`;
+    box.innerHTML = `<h1>✅ Betaald</h1><p><a href="${esc(terugUrl)}">Terug</a></p>`;
   });
 }
